@@ -27,3 +27,7 @@ CONFIG_ZMK_USB_DEVICE_STACK_NEXT=y
 
 CONFIG_ZMK_BATTERY_REPORTING=y
 CONFIG_ZMK_BATTERY_REPORTING_FETCH_MODE_STATE_OF_CHARGE=y
+
+# The fuel gauge has a level a few seconds after boot; until ZMK reads it,
+# hosts see the Battery Service default of 100 %. Reading it is cheap.
+CONFIG_ZMK_BATTERY_REPORT_INTERVAL=10

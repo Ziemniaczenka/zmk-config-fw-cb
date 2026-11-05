@@ -1,0 +1,36 @@
+sensor: npm13xx_charger: stop the charger before configuring it
+
+The nPM1300 datasheet requires the charger to be disabled while
+BCHGISETMSB/LSB change: the setting takes effect when charging is enabled.
+The charger can already be on when the driver starts, because the PMIC
+keeps its state across a reset of the host, or because a bootloader enabled
+it. The driver's writes then have no effect on the current: charging goes on
+at the old value while IBAT readings are converted using the new one.
+
+Seen on the Framework Control Board: on a cold boot the registers read
+BCHGISET 60/0 (240 mA) with charging enabled before the driver starts. With
+450 mA in devicetree it delivered about 240 mA and readings were 1.9 times
+too high. With this change it delivers 0.44 A on a meter (0.50 A read),
+0.48 A is drawn from USB instead of 0.27 A, and in constant voltage a meter
+shows 78 mA against 78-81 mA read.
+
+Applies to FrameworkComputer/zephyr 8597b2f.
+
+diff --git a/drivers/sensor/nordic/npm13xx_charger/npm13xx_charger.c b/drivers/sensor/nordic/npm13xx_charger/npm13xx_charger.c
+--- a/drivers/sensor/nordic/npm13xx_charger/npm13xx_charger.c
++++ b/drivers/sensor/nordic/npm13xx_charger/npm13xx_charger.c
+@@ -536,6 +536,14 @@ int npm13xx_charger_init(const struct device *dev)
+ 		return -ENODEV;
+ 	}
+
++	/* The charge current takes effect when charging is enabled, and the charger
++	 * may still be on from before a reset of the host, so stop it first.
++	 */
++	ret = mfd_npm13xx_reg_write(config->mfd, CHGR_BASE, CHGR_OFFSET_EN_CLR, 1U);
++	if (ret != 0) {
++		return ret;
++	}
++
+ 	/* Configure temperature thresholds */
+ 	ret = mfd_npm13xx_reg_write(config->mfd, ADC_BASE, ADC_OFFSET_NTCR_SEL,
+ 				    config->thermistor_idx);

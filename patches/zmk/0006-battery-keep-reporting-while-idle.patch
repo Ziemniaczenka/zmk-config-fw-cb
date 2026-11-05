@@ -1,0 +1,22 @@
+battery: keep reporting while idle
+
+The report timer stopped as soon as the keyboard went idle (30 s without a
+key press), so the level a host showed froze, e.g. for the whole time the
+keyboard sat charging.  Keep it running while idle and stop it only for
+deep sleep.  Hosts are still only notified when the level changes.
+
+Applies to petejohanson/zmk 5565f21.
+
+diff --git a/app/src/battery.c b/app/src/battery.c
+index 811baf8..00c2d82 100644
+--- a/app/src/battery.c
++++ b/app/src/battery.c
+@@ -168,7 +168,8 @@ static int battery_event_listener(const zmk_event_t *eh) {
+         case ZMK_ACTIVITY_ACTIVE:
+             zmk_battery_start_reporting();
+             return 0;
+         case ZMK_ACTIVITY_IDLE:
++            return 0;
+         case ZMK_ACTIVITY_SLEEP:
+             k_timer_stop(&battery_timer);
+             return 0;

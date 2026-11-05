@@ -19,7 +19,19 @@ scripts/build.sh             # builds and signs
 
 The finished image is saved as `build/framework_cb_matrix/zephyr/zmk.signed.bin`. Both ways of building apply the fixes in `patches/` before compiling.
 
-The two patches in `patches/zephyr/` come from ZMK's own Zephyr fork. ZMK's Kconfig sets `NRF_SOC_VALIDATE_HEADERS_DISABLED`, which only the first one defines, and ZMK loads the keymap through a CMake hook that the second one adds. `patches/zmk/0003` to `0005` fix the places where ZMK's draft fails to compile on Zephyr 4.5. All of these can go once ZMK supports Zephyr 4.5.
+## Patches
+
+| Patch | What it does | Can go when |
+|---|---|---|
+| `zephyr/0001` | Defines `NRF_SOC_VALIDATE_HEADERS_DISABLED`, which ZMK's Kconfig sets. From ZMK's Zephyr fork. | ZMK supports Zephyr 4.5 |
+| `zephyr/0002` | Adds the `post_boards_shields` CMake hook that ZMK loads the keymap through. From ZMK's Zephyr fork. | ZMK supports Zephyr 4.5 |
+| `zephyr/0003` | Makes the nPM1300 charger driver stop the charger before configuring it. The charger is already running at 240 mA when the driver starts, most likely set by Framework's factory bootloader, and a new current only takes effect when charging is enabled. Without this the configured current is ignored and current readings are about twice too high. | Zephyr has the fix |
+| `zmk/0001` | Lets ZMK use Zephyr's `device_next` USB stack, the only one that supports this board's USB controller. | ZMK supports `device_next` |
+| `zmk/0002` | Lets the firmware turn Bluetooth off at runtime, for the wired/Bluetooth switch. | ZMK can do this itself |
+| `zmk/0003` | Drops ZMK Studio's default for `BT_CONN_TX_MAX`. Zephyr 4.5 removes that option and Kconfig aborts on it. | ZMK supports Zephyr 4.5 |
+| `zmk/0004` | Includes the generated syscall headers from `zephyr/syscalls/`, the path Zephyr 4.5 requires. | ZMK supports Zephyr 4.5 |
+| `zmk/0005` | Adapts ZMK Studio's UART code, because `uart_irq_update()` no longer returns a value. | ZMK supports Zephyr 4.5 |
+| `zmk/0006` | Keeps reporting the battery level while the keyboard is idle. ZMK stops 30 s after the last key press, so hosts kept an old level. | ZMK changes this |
 
 ## Flashing
 
@@ -43,9 +55,9 @@ Only Zephyr's newer USB stack, called device_next, supports this board's USB con
 
 ## Battery
 
-The board's power chip, the nPM1300, starts with its charger turned off, so the firmware turns it on. It charges the battery to 4.2 V at 450 mA and draws up to 500 mA from USB. Framework hasn't published details about its battery, so these settings were chosen to be safe for any Li-ion or LiPo cell. The battery's temperature sensor (thermistor) must be a 10 kOhm B3380 type, or the battery won't charge. Framework's board doesn't define a charger, so these settings are in the `npm1300_charger` node in `boards/framework/framework_wireless_tp_kb/framework_wireless_tp_kb_nrf54lm20a_cpuapp_zmk.dts`.
+The charger on the board's power chip, the nPM1300, is already running at 240 mA when the firmware starts, most likely set by Framework's factory bootloader. The firmware restarts it with its own settings (`patches/zephyr/0003`): it charges the battery to 4.2 V at 450 mA and draws up to 500 mA from USB. Framework hasn't published details about its battery. 450 mA is meant for cells of 800 mAh or more, so lower it for a smaller cell. The battery's temperature sensor (thermistor) must be a 10 kOhm B3380 type, or the battery won't charge. Framework's board doesn't define a charger, so these settings are in the `npm1300_charger` node in `boards/framework/framework_wireless_tp_kb/framework_wireless_tp_kb_nrf54lm20a_cpuapp_zmk.dts`.
 
-The battery level comes from Nordic's nRF Fuel Gauge library. It combines the chip's voltage, current and temperature readings with the charging state, instead of going by voltage alone. It takes a reading every second while USB is plugged in or the board draws 20 mA or more, and every 10 seconds otherwise. It also saves its progress every hour, so a reset doesn't make it lose track. For now it uses Nordic's example LiPo battery model instead of a model of the real battery. For better accuracy, make a model with Nordic's nPM PowerUP app and use it to replace `third_party/nrf_fuel_gauge/battery_model.inc`. With no battery connected, the board reports 0% over Bluetooth. Its accuracy with a real battery hasn't been tested yet.
+The battery level comes from Nordic's nRF Fuel Gauge library. It combines the chip's voltage, current and temperature readings with the charging state, instead of going by voltage alone. It takes a reading every second while USB is plugged in or the board draws 20 mA or more, and every 10 seconds otherwise. It also saves its progress every hour, so a reset doesn't make it lose track. For now it uses Nordic's example LiPo battery model instead of a model of the real battery. For better accuracy, make a model with Nordic's nPM PowerUP app and use it to replace `third_party/nrf_fuel_gauge/battery_model.inc`. The level is sent every 10 seconds when it changes, also while the keyboard is idle (`patches/zmk/0006`). With no battery connected, hosts keep the last level. The example model is for a cell of about 270 mAh, so with a larger cell the level changes too quickly.
 
 ## Wired/Bluetooth switch
 
